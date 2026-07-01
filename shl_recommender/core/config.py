@@ -22,7 +22,7 @@ class Settings:
     # Gemini AI Studio Configurations (Primary for completions)
     GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "dummy")
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    GEMINI_LLM_MODEL: str = os.environ.get("GEMINI_LLM_MODEL", "gemini-2.5-flash")
+    GEMINI_LLM_MODEL: str = os.environ.get("GEMINI_LLM_MODEL", "gemini-2.0-flash-lite")
     
     # OpenRouter API Configurations (For Embeddings)
     OPENROUTER_API_KEY: str = os.environ.get("OPENROUTER_API_KEY", "dummy")

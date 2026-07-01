@@ -52,8 +52,8 @@ async def run_trace_test(file_name: str, turns: List[Dict[str, Any]]):
             payload = {"messages": messages}
             print(f"Turn {idx} User: {turn['user']}")
             
-            # Sleep 4 seconds to avoid Groq TPM rate limits in local testing
-            await asyncio.sleep(4)
+            # Sleep 6 seconds to avoid rate limits in local testing
+            await asyncio.sleep(6)
             
             try:
                 response = await client.post(API_URL, json=payload)

@@ -64,7 +64,7 @@ def search_index(
 
     if query_embedding is None:
         print("Query embedding is None. Degrading to catalog order.")
-        return allowed_ids[:7]
+        return allowed_ids[:20]
 
     try:
         allowed_ids_np = np.array(allowed_ids, dtype=np.int64)
@@ -73,7 +73,7 @@ def search_index(
         query_vector = np.array([query_embedding], dtype=np.float32)
         params = faiss.SearchParameters(sel=selector)
         
-        distances, indices = faiss_index.search(query_vector, 7, params=params)
+        distances, indices = faiss_index.search(query_vector, 20, params=params)
         return [int(idx) for idx in indices[0] if idx != -1]
     except Exception as e:
         print(f"FAISS search failed: {e}. Falling back to catalog order.")

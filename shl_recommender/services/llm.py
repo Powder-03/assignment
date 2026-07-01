@@ -22,14 +22,17 @@ async def _chat_completion_with_fallback(
     """
     clients_and_models = []
     
+    # Primary: Groq (14,400 RPD free tier — most headroom)
+    if groq_client:
+        clients_and_models.append((groq_client, settings.GROQ_LLM_MODEL))
+    
+    # Fallback 1: Gemini (use flash-lite for higher free-tier limits)
     gemini_key = gemini_client.api_key if gemini_client else None
     if gemini_key and gemini_key != "dummy":
         clients_and_models.append((gemini_client, settings.GEMINI_LLM_MODEL))
-    else:
-        print("[LLM] Gemini client not configured or dummy key. Skipping Gemini...")
     
+    # Fallback 2: Groq smaller model
     if groq_client:
-        clients_and_models.append((groq_client, settings.GROQ_LLM_MODEL))
         clients_and_models.append((groq_client, settings.GROQ_FALLBACK_MODEL))
         
     if not clients_and_models:

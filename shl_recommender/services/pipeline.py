@@ -34,7 +34,7 @@ async def run_recommender_pipeline(
     try:
         # 1. Turn-cap check (spec: max 8 total messages including user & assistant)
         total_turns = len(request.messages)
-        turn_limit_reached = total_turns >= 6  # Leave room for 1 user + 1 assistant = 8
+        turn_limit_reached = total_turns >= 7  # At 7 messages, we have room for exactly 1 reply to hit 8
 
         # Recover previous shortlist IDs from messages history
         previous_ids = catalog_svc.parse_previous_recommendations(request.messages, catalog)
@@ -146,13 +146,10 @@ async def run_recommender_pipeline(
                 test_type=item["test_type"]
             ))
 
-        # Build markdown table and append
-        table_md = catalog_svc.build_markdown_table(selected_ids, catalog)
         reply_base = gen_response.get("assistant_reply", "").strip()
-        final_reply = f"{reply_base}\n\n{table_md}"
 
         return ChatResponse(
-            reply=final_reply,
+            reply=reply_base,
             recommendations=recommendations_list,
             end_of_conversation=state.get("end_of_conversation", False)
         )
