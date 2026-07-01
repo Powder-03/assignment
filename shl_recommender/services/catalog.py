@@ -18,30 +18,35 @@ def load_catalog(catalog_path: str) -> Dict[int, Dict[str, Any]]:
 def parse_previous_recommendations(messages: List[Message], catalog: Dict[int, Dict[str, Any]]) -> List[int]:
     """
     Parses the conversation history backwards to recover the last recommended shortlist.
-    Uses URLs mentioned in assistant responses to resolve IDs.
+    Uses hidden state comments (e.g. <!-- State: 105, 212 -->) to resolve IDs.
     """
-    url_pattern = re.compile(r"https://www.shl.com/products/product-catalog/view/[a-zA-Z0-9\-_]+/?")
-    
-    url_to_id = {item["url"].rstrip("/"): item["id"] for item in catalog.values()}
+    state_pattern = re.compile(r"<!--\s*State:\s*([\d,\s]+)\s*-->")
     
     for msg in reversed(messages):
         if msg.role != "assistant":
             continue
-        urls = url_pattern.findall(msg.content)
-        found_ids = []
-        for u in urls:
-            u_clean = u.rstrip("/")
-            if u_clean in url_to_id:
-                found_ids.append(url_to_id[u_clean])
-        if found_ids:
-            # Remove duplicates while preserving order
-            seen = set()
-            ordered_ids = []
-            for fid in found_ids:
-                if fid not in seen:
-                    seen.add(fid)
-                    ordered_ids.append(fid)
-            return ordered_ids
+            
+        match = state_pattern.search(msg.content)
+        if match:
+            id_str = match.group(1)
+            found_ids = []
+            for token in id_str.split(","):
+                token = token.strip()
+                if token.isdigit():
+                    fid = int(token)
+                    if fid in catalog:
+                        found_ids.append(fid)
+            
+            if found_ids:
+                # Remove duplicates while preserving order
+                seen = set()
+                ordered_ids = []
+                for fid in found_ids:
+                    if fid not in seen:
+                        seen.add(fid)
+                        ordered_ids.append(fid)
+                return ordered_ids
+                
     return []
 
 def format_languages(languages_list: List[str]) -> str:

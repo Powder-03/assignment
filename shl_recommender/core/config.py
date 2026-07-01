@@ -18,7 +18,7 @@ class Settings:
     GROQ_API_KEYS = [k.strip() for k in GROQ_API_KEYS_STR.split(",") if k.strip()] if GROQ_API_KEYS_STR else ["dummy"]
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     GROQ_LLM_MODEL: str = "llama-3.3-70b-versatile"
-    GROQ_FALLBACK_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_FALLBACK_MODEL: str = "qwen/qwen3-32b"
     
     # Gemini AI Studio Configurations (Primary for completions)
     GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "dummy")
