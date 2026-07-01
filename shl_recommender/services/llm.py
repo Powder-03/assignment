@@ -6,6 +6,9 @@ from shl_recommender.domain.schemas import Message
 from shl_recommender.core.config import settings
 from shl_recommender.core.constants import STATE_EXTRACTOR_SYSTEM_PROMPT, RESPONSE_GENERATOR_SYSTEM_PROMPT
 
+# Round-robin counter to spread RPM load across Groq keys
+_groq_rr_index = 0
+
 
 async def _chat_completion_with_fallback(
     gemini_client: AsyncOpenAI,
@@ -17,19 +20,28 @@ async def _chat_completion_with_fallback(
 ) -> str:
     """
     Tries Groq (llama-3.3-70b-versatile) rotating through keys first.
-    If all Groq keys hit rate limit, falls back to Gemini.
+    If all Groq keys hit rate limit, falls back to Qwen, then Gemini.
+    Uses round-robin to spread RPM load evenly across keys.
     """
+    global _groq_rr_index
     clients_and_models = []
     
-    # Primary: All Groq clients (llama-3.3-70b-versatile)
+    # Round-robin: rotate clients so each request starts from a different key
     if groq_clients:
-        for client in groq_clients:
-            clients_and_models.append((client, settings.GROQ_LLM_MODEL))
+        n = len(groq_clients)
+        start = _groq_rr_index % n
+        _groq_rr_index += 1
+        rotated = groq_clients[start:] + groq_clients[:start]
+    else:
+        rotated = []
 
-    # Secondary: All Groq clients with fallback model (qwen3-32b)
-    if groq_clients:
-        for client in groq_clients:
-            clients_and_models.append((client, settings.GROQ_FALLBACK_MODEL))
+    # Primary: All Groq clients (llama-3.3-70b-versatile) in rotated order
+    for client in rotated:
+        clients_and_models.append((client, settings.GROQ_LLM_MODEL))
+
+    # Secondary: All Groq clients with fallback model (qwen3-32b) in rotated order
+    for client in rotated:
+        clients_and_models.append((client, settings.GROQ_FALLBACK_MODEL))
             
     # Tertiary: Gemini
     gemini_key = gemini_client.api_key if gemini_client else None
