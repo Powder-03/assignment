@@ -18,14 +18,14 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
     catalog = getattr(http_request.app.state, "catalog", None)
     index = getattr(http_request.app.state, "index", None)
     gemini_client = getattr(http_request.app.state, "gemini_client", None)
-    groq_client = getattr(http_request.app.state, "groq_client", None)
+    groq_clients = getattr(http_request.app.state, "groq_clients", None)
     embed_client = getattr(http_request.app.state, "embed_client", None)
     
-    if not catalog or index is None or not gemini_client or not groq_client or not embed_client:
+    if not catalog or index is None or not gemini_client or not groq_clients or not embed_client:
         raise HTTPException(
             status_code=503,
             detail="The service is starting up or missing catalogue/client components."
         )
         
-    response = await run_recommender_pipeline(request, catalog, index, gemini_client, groq_client, embed_client)
+    response = await run_recommender_pipeline(request, catalog, index, gemini_client, groq_clients, embed_client)
     return response

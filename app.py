@@ -33,13 +33,14 @@ async def lifespan(app: FastAPI):
     else:
         print("FAISS index loading skipped or failed.")
 
-    # 3. Initialize Groq AsyncOpenAI client (for completions)
-    groq_api_key = os.environ.get("GROQ_API_KEY", settings.GROQ_API_KEY)
-    app.state.groq_client = AsyncOpenAI(
-        base_url=settings.GROQ_BASE_URL,
-        api_key=groq_api_key
-    )
-    print("Groq AsyncOpenAI client initialized.")
+    # 3. Initialize Groq AsyncOpenAI clients
+    app.state.groq_clients = []
+    for key in settings.GROQ_API_KEYS:
+        app.state.groq_clients.append(AsyncOpenAI(
+            base_url=settings.GROQ_BASE_URL,
+            api_key=key
+        ))
+    print(f"Initialized {len(app.state.groq_clients)} Groq AsyncOpenAI clients.")
 
     # 4. Initialize Gemini AsyncOpenAI client (for completions)
     gemini_api_key = os.environ.get("GEMINI_API_KEY", settings.GEMINI_API_KEY)

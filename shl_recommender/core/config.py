@@ -14,7 +14,8 @@ load_dotenv()
 
 class Settings:
     # Groq API Configurations (For Chat Completions)
-    GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "dummy")
+    GROQ_API_KEYS_STR: str = os.environ.get("GROQ_API_KEYS", os.environ.get("GROQ_API_KEY", ""))
+    GROQ_API_KEYS = [k.strip() for k in GROQ_API_KEYS_STR.split(",") if k.strip()] if GROQ_API_KEYS_STR else ["dummy"]
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     GROQ_LLM_MODEL: str = "llama-3.3-70b-versatile"
     GROQ_FALLBACK_MODEL: str = "llama-3.1-8b-instant"
@@ -35,9 +36,9 @@ class Settings:
     INDEX_FILE: str = "index.faiss"
     
     # Latency/Timeout Limits (in seconds)
-    STATE_EXTRACTOR_TIMEOUT: float = 8.0
-    CLARIFY_GENERATOR_TIMEOUT: float = 8.0
-    RESPONSE_GENERATOR_TIMEOUT: float = 8.0
-    EMBEDDING_TIMEOUT: float = 6.0
+    STATE_EXTRACTOR_TIMEOUT: float = 25.0
+    CLARIFY_GENERATOR_TIMEOUT: float = 25.0
+    RESPONSE_GENERATOR_TIMEOUT: float = 25.0
+    EMBEDDING_TIMEOUT: float = 10.0
 
 settings = Settings()

@@ -9,68 +9,53 @@ from shl_recommender.core.constants import STATE_EXTRACTOR_SYSTEM_PROMPT, RESPON
 
 async def _chat_completion_with_fallback(
     gemini_client: AsyncOpenAI,
-    groq_client: AsyncOpenAI,
+    groq_clients: List[AsyncOpenAI],
     messages: List[Dict[str, str]],
     timeout: float,
     temperature: float = 0.0,
     json_mode: bool = True
 ) -> str:
     """
-    Tries Gemini primary model first (if API key is configured).
-    If it fails, falls back to Groq 70B, then Groq 8B.
-    Handles automatic rate-limit (429) retries with backoff sleep.
+    Tries Groq (llama-3.3-70b-versatile) rotating through keys first.
+    If all Groq keys hit rate limit, falls back to Gemini.
     """
     clients_and_models = []
     
-    # Primary: Groq (14,400 RPD free tier — most headroom)
-    if groq_client:
-        clients_and_models.append((groq_client, settings.GROQ_LLM_MODEL))
-    
-    # Fallback 1: Gemini (use flash-lite for higher free-tier limits)
+    # Primary: All Groq clients (llama-3.3-70b-versatile)
+    if groq_clients:
+        for client in groq_clients:
+            clients_and_models.append((client, settings.GROQ_LLM_MODEL))
+            
+    # Secondary: Gemini
     gemini_key = gemini_client.api_key if gemini_client else None
     if gemini_key and gemini_key != "dummy":
         clients_and_models.append((gemini_client, settings.GEMINI_LLM_MODEL))
-    
-    # Fallback 2: Groq smaller model
-    if groq_client:
-        clients_and_models.append((groq_client, settings.GROQ_FALLBACK_MODEL))
         
     if not clients_and_models:
         raise RuntimeError("No LLM clients configured")
         
     for client, model in clients_and_models:
-        retries = 3
-        backoff = 2.0  # seconds
-        
-        while retries > 0:
-            try:
-                kwargs = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": temperature
-                }
-                if json_mode:
-                    kwargs["response_format"] = {"type": "json_object"}
-                
-                response = await asyncio.wait_for(
-                    client.chat.completions.create(**kwargs),
-                    timeout=timeout
-                )
-                return response.choices[0].message.content
-            except Exception as e:
-                error_str = str(e)
-                # Check for rate limit (429) in error message
-                if "429" in error_str or "rate_limit" in error_str.lower() or "limit exceeded" in error_str.lower():
-                    retries -= 1
-                    if retries > 0:
-                        print(f"Rate limit hit for model '{model}'. Retrying in {backoff}s... ({retries} retries left)")
-                        await asyncio.sleep(backoff)
-                        backoff *= 1.5
-                        continue
-                
+        try:
+            kwargs = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature
+            }
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            
+            response = await asyncio.wait_for(
+                client.chat.completions.create(**kwargs),
+                timeout=timeout
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "rate_limit" in error_str.lower() or "limit exceeded" in error_str.lower():
+                print(f"Rate limit hit for model '{model}'. Switching to next key/model...")
+            else:
                 print(f"LLM call failed with model '{model}': {e}")
-                break  # Break inner loop to try next fallback
-                
+            # Continue to next model/client in the list
         # If we broke or exhausted retries for the last model, raise
         if (client, model) == clients_and_models[-1]:
             raise RuntimeError("All models failed including fallback")
@@ -83,7 +68,7 @@ async def extract_state(
     messages: List[Message],
     turn_limit_reached: bool,
     gemini_client: AsyncOpenAI,
-    groq_client: AsyncOpenAI
+    groq_clients: List[AsyncOpenAI]
 ) -> Dict[str, Any]:
     """
     Calls Groq/Gemini Cloud API to extract structured conversation state.
@@ -98,7 +83,7 @@ async def extract_state(
 
     try:
         content = await _chat_completion_with_fallback(
-            gemini_client, groq_client, api_messages,
+            gemini_client, groq_clients, api_messages,
             timeout=settings.STATE_EXTRACTOR_TIMEOUT,
             temperature=0.0,
             json_mode=True
@@ -121,14 +106,14 @@ async def extract_state(
 async def generate_clarifying_question(
     messages: List[Message],
     gemini_client: AsyncOpenAI,
-    groq_client: AsyncOpenAI
+    groq_clients: List[AsyncOpenAI]
 ) -> str:
     """
     Generates a concise clarifying question.
     """
     clarify_system = (
         "You are a helpful SHL Assessment Recommender assistant. The user's request is too vague. "
-        "Ask a concise, polite clarifying question (at most 2 sentences) to narrow down their hiring needs, "
+        "Ask a concise, polite clarifying question (strictly 1 sentence) to narrow down their hiring needs, "
         "such as target role, level of seniority, language requirements, or assessment focus. "
         "Do not output markdown tables or recommendations yet."
     )
@@ -139,7 +124,7 @@ async def generate_clarifying_question(
 
     try:
         content = await _chat_completion_with_fallback(
-            gemini_client, groq_client, api_messages,
+            gemini_client, groq_clients, api_messages,
             timeout=settings.CLARIFY_GENERATOR_TIMEOUT,
             temperature=0.3,
             json_mode=False
@@ -150,22 +135,20 @@ async def generate_clarifying_question(
         return "Could you please tell me more about the role you are hiring for and what specific skills or behavioral traits you'd like to assess?"
 
 
-def _minimize_catalog_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    minimized = []
+def _serialize_items_compact(items: List[Dict[str, Any]]) -> str:
+    lines = []
     for item in items:
         desc = item.get("description") or ""
-        if len(desc) > 250:
-            desc = desc[:250] + "..."
-        
-        minimized.append({
-            "id": item["id"],
-            "name": item["name"],
-            "test_type": item["test_type"],
-            "description": desc,
-            "duration": item.get("duration") or "—",
-            "languages": item.get("languages", [])[:4]
-        })
-    return minimized
+        # Truncate description to 120 chars to keep token footprint tiny
+        if len(desc) > 120:
+            desc = desc[:120].strip() + "..."
+        langs = ", ".join(item.get("languages", [])[:3])
+        if not langs:
+            langs = "—"
+        duration = item.get("duration") or "—"
+        line = f"[ID:{item['id']}] Name: {item['name']} | Type: {item['test_type']} | Duration: {duration} | Langs: {langs} | Desc: {desc}"
+        lines.append(line)
+    return "\n".join(lines)
 
 
 async def generate_response(
@@ -173,14 +156,13 @@ async def generate_response(
     retrieved_items: List[Dict[str, Any]],
     previous_ids: List[int],
     gemini_client: AsyncOpenAI,
-    groq_client: AsyncOpenAI
+    groq_clients: List[AsyncOpenAI]
 ) -> Dict[str, Any]:
     """
     Generates the assistant reply and selects recommendations.
     """
-    min_items = _minimize_catalog_items(retrieved_items)
-    items_json_str = json.dumps(min_items, indent=2, ensure_ascii=False)
-    response_gen_system = RESPONSE_GENERATOR_SYSTEM_PROMPT + f"\n\nRetrieved Catalog Items:\n{items_json_str}\n\nPreviously Recommended IDs: {previous_ids}"
+    items_text = _serialize_items_compact(retrieved_items)
+    response_gen_system = RESPONSE_GENERATOR_SYSTEM_PROMPT + f"\n\nRetrieved Catalog Items:\n{items_text}\n\nPreviously Recommended IDs: {previous_ids}"
 
     api_messages = [{"role": "system", "content": response_gen_system}]
     for m in messages:
@@ -188,7 +170,7 @@ async def generate_response(
 
     try:
         content = await _chat_completion_with_fallback(
-            gemini_client, groq_client, api_messages,
+            gemini_client, groq_clients, api_messages,
             timeout=settings.RESPONSE_GENERATOR_TIMEOUT,
             temperature=0.0,
             json_mode=True

@@ -45,15 +45,15 @@ async def run_trace_test(file_name: str, turns: List[Dict[str, Any]]):
     print(f"\n--- Testing Trace: {file_name} ---")
     messages = []
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=90.0) as client:
         for idx, turn in enumerate(turns, 1):
             messages.append({"role": "user", "content": turn["user"]})
             
             payload = {"messages": messages}
             print(f"Turn {idx} User: {turn['user']}")
             
-            # Sleep 6 seconds to avoid rate limits in local testing
-            await asyncio.sleep(6)
+            # Sleep 15 seconds to avoid Gemini's 15 RPM rate limit across multiple traces
+            await asyncio.sleep(15)
             
             try:
                 response = await client.post(API_URL, json=payload)

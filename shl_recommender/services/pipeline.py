@@ -12,7 +12,7 @@ async def run_recommender_pipeline(
     catalog: Dict[int, Dict[str, Any]],
     faiss_index: faiss.IndexIDMap,
     gemini_client: AsyncOpenAI,
-    groq_client: AsyncOpenAI,
+    groq_clients: List[AsyncOpenAI],
     embed_client: AsyncOpenAI
 ) -> ChatResponse:
     """
@@ -40,7 +40,7 @@ async def run_recommender_pipeline(
         previous_ids = catalog_svc.parse_previous_recommendations(request.messages, catalog)
 
         # 2. State Extractor (Step 1)
-        state = await llm_svc.extract_state(request.messages, turn_limit_reached, gemini_client, groq_client)
+        state = await llm_svc.extract_state(request.messages, turn_limit_reached, gemini_client, groq_clients)
         print(f"[DEBUG] Extracted state: {json.dumps(state, indent=2)}")
 
         if turn_limit_reached:
@@ -54,15 +54,14 @@ async def run_recommender_pipeline(
                 end_of_conversation=False
             )
 
-        # Check recommendations_ready BEFORE vague — so "no preference" users get results
+        # If recommendations are not ready, we must clarify.
         if not state.get("recommendations_ready") and not turn_limit_reached:
-            if state.get("is_vague"):
-                reply_content = await llm_svc.generate_clarifying_question(request.messages, gemini_client, groq_client)
-                return ChatResponse(
-                    reply=reply_content,
-                    recommendations=[],
-                    end_of_conversation=False
-                )
+            reply_content = await llm_svc.generate_clarifying_question(request.messages, gemini_client, groq_clients)
+            return ChatResponse(
+                reply=reply_content,
+                recommendations=[],
+                end_of_conversation=False
+            )
 
         # 3. Pre-Filtered Retrieval (Step 2)
         allowed_test_types = state.get("allowed_test_types", [])
@@ -112,7 +111,7 @@ async def run_recommender_pipeline(
         print(f"[DEBUG] Previous recommended IDs: {previous_ids}")
 
         # 4. Response Generator (Step 3)
-        gen_response = await llm_svc.generate_response(request.messages, retrieved_items, previous_ids, gemini_client, groq_client)
+        gen_response = await llm_svc.generate_response(request.messages, retrieved_items, previous_ids, gemini_client, groq_clients)
         print(f"[DEBUG] Generator response: {json.dumps(gen_response, indent=2)}")
 
         # 5. Reconstruct and Format Response (Step 4)
@@ -141,15 +140,20 @@ async def run_recommender_pipeline(
         for sid in selected_ids:
             item = catalog[sid]
             recommendations_list.append(RecommendationItem(
+                id=item["id"],
                 name=item["name"],
-                url=item["url"],
-                test_type=item["test_type"]
+                test_type=item["test_type"],
+                keys=item.get("keys", []),
+                duration=item.get("duration"),
+                languages=item.get("languages", []),
+                url=item.get("url", ""),
+                description=item.get("description")
             ))
 
-        reply_base = gen_response.get("assistant_reply", "").strip()
+        final_reply = gen_response.get("assistant_reply", "").strip()
 
         return ChatResponse(
-            reply=reply_base,
+            reply=final_reply,
             recommendations=recommendations_list,
             end_of_conversation=state.get("end_of_conversation", False)
         )
