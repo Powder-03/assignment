@@ -120,7 +120,8 @@ def main():
                 response = client.embeddings.create(
                     model=settings.EMBEDDING_MODEL,
                     input=batch,
-                    dimensions=settings.EMBEDDING_DIMENSIONS
+                    dimensions=settings.EMBEDDING_DIMENSIONS,
+                    encoding_format="float"
                 )
                 embeddings = [x.embedding for x in response.data]
                 all_embeddings.extend(embeddings)

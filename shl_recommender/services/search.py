@@ -27,7 +27,8 @@ async def get_query_embedding(query_text: str, embed_client: AsyncOpenAI) -> Opt
             embed_client.embeddings.create(
                 model=settings.EMBEDDING_MODEL,
                 input=[query_text],
-                dimensions=settings.EMBEDDING_DIMENSIONS
+                dimensions=settings.EMBEDDING_DIMENSIONS,
+                encoding_format="float"
             ),
             timeout=settings.EMBEDDING_TIMEOUT
         )
@@ -39,7 +40,8 @@ async def get_query_embedding(query_text: str, embed_client: AsyncOpenAI) -> Opt
                 embed_client.embeddings.create(
                     model=settings.EMBEDDING_MODEL,
                     input=[query_text],
-                    dimensions=settings.EMBEDDING_DIMENSIONS
+                    dimensions=settings.EMBEDDING_DIMENSIONS,
+                    encoding_format="float"
                 ),
                 timeout=settings.EMBEDDING_TIMEOUT
             )
@@ -62,7 +64,7 @@ def search_index(
 
     if query_embedding is None:
         print("Query embedding is None. Degrading to catalog order.")
-        return allowed_ids[:10]
+        return allowed_ids[:7]
 
     try:
         allowed_ids_np = np.array(allowed_ids, dtype=np.int64)
@@ -71,8 +73,8 @@ def search_index(
         query_vector = np.array([query_embedding], dtype=np.float32)
         params = faiss.SearchParameters(sel=selector)
         
-        distances, indices = faiss_index.search(query_vector, 10, params=params)
+        distances, indices = faiss_index.search(query_vector, 7, params=params)
         return [int(idx) for idx in indices[0] if idx != -1]
     except Exception as e:
         print(f"FAISS search failed: {e}. Falling back to catalog order.")
-        return allowed_ids[:10]
+        return allowed_ids[:7]

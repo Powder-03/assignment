@@ -1,6 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from shl_recommender.core.config import settings
 from shl_recommender.services import catalog as catalog_svc
@@ -34,13 +35,21 @@ async def lifespan(app: FastAPI):
 
     # 3. Initialize Groq AsyncOpenAI client (for completions)
     groq_api_key = os.environ.get("GROQ_API_KEY", settings.GROQ_API_KEY)
-    app.state.aclient = AsyncOpenAI(
+    app.state.groq_client = AsyncOpenAI(
         base_url=settings.GROQ_BASE_URL,
         api_key=groq_api_key
     )
     print("Groq AsyncOpenAI client initialized.")
 
-    # 4. Initialize OpenRouter AsyncOpenAI client (for embeddings)
+    # 4. Initialize Gemini AsyncOpenAI client (for completions)
+    gemini_api_key = os.environ.get("GEMINI_API_KEY", settings.GEMINI_API_KEY)
+    app.state.gemini_client = AsyncOpenAI(
+        base_url=settings.GEMINI_BASE_URL,
+        api_key=gemini_api_key
+    )
+    print("Gemini AsyncOpenAI client initialized.")
+
+    # 5. Initialize OpenRouter AsyncOpenAI client (for embeddings)
     or_api_key = os.environ.get("OPENROUTER_API_KEY", settings.OPENROUTER_API_KEY)
     app.state.embed_client = AsyncOpenAI(
         base_url=settings.OPENROUTER_BASE_URL,
@@ -56,6 +65,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SHL Assessment Recommender API",
     lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount the modular API endpoints router

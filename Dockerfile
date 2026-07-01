@@ -15,6 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files, including pre-generated assets
+COPY shl_recommender/ ./shl_recommender/
 COPY app.py .
 COPY clean_catalog.json .
 COPY index.faiss .

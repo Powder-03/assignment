@@ -1,3 +1,4 @@
+import json
 import faiss
 from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI
@@ -10,7 +11,8 @@ async def run_recommender_pipeline(
     request: ChatRequest,
     catalog: Dict[int, Dict[str, Any]],
     faiss_index: faiss.IndexIDMap,
-    aclient: AsyncOpenAI,
+    gemini_client: AsyncOpenAI,
+    groq_client: AsyncOpenAI,
     embed_client: AsyncOpenAI
 ) -> ChatResponse:
     """
@@ -30,16 +32,16 @@ async def run_recommender_pipeline(
     )
     
     try:
-        # 1. Count user messages for turn-cap check
-        user_msgs = [m for m in request.messages if m.role == "user"]
-        user_count = len(user_msgs)
-        turn_limit_reached = user_count >= 7
+        # 1. Turn-cap check (spec: max 8 total messages including user & assistant)
+        total_turns = len(request.messages)
+        turn_limit_reached = total_turns >= 6  # Leave room for 1 user + 1 assistant = 8
 
         # Recover previous shortlist IDs from messages history
         previous_ids = catalog_svc.parse_previous_recommendations(request.messages, catalog)
 
         # 2. State Extractor (Step 1)
-        state = await llm_svc.extract_state(request.messages, turn_limit_reached, aclient)
+        state = await llm_svc.extract_state(request.messages, turn_limit_reached, gemini_client, groq_client)
+        print(f"[DEBUG] Extracted state: {json.dumps(state, indent=2)}")
 
         if turn_limit_reached:
             state["recommendations_ready"] = True
@@ -52,14 +54,15 @@ async def run_recommender_pipeline(
                 end_of_conversation=False
             )
 
-        # Process vague requirements
-        if state.get("is_vague") and not turn_limit_reached:
-            reply_content = await llm_svc.generate_clarifying_question(request.messages, aclient)
-            return ChatResponse(
-                reply=reply_content,
-                recommendations=[],
-                end_of_conversation=False
-            )
+        # Check recommendations_ready BEFORE vague — so "no preference" users get results
+        if not state.get("recommendations_ready") and not turn_limit_reached:
+            if state.get("is_vague"):
+                reply_content = await llm_svc.generate_clarifying_question(request.messages, gemini_client, groq_client)
+                return ChatResponse(
+                    reply=reply_content,
+                    recommendations=[],
+                    end_of_conversation=False
+                )
 
         # 3. Pre-Filtered Retrieval (Step 2)
         allowed_test_types = state.get("allowed_test_types", [])
@@ -105,9 +108,12 @@ async def run_recommender_pipeline(
                 combined_ids.append(prev_id)
 
         retrieved_items = [catalog[rid] for rid in combined_ids if rid in catalog]
+        print(f"[DEBUG] Retrieved items: {[item['name'] for item in retrieved_items]}")
+        print(f"[DEBUG] Previous recommended IDs: {previous_ids}")
 
         # 4. Response Generator (Step 3)
-        gen_response = await llm_svc.generate_response(request.messages, retrieved_items, previous_ids, aclient)
+        gen_response = await llm_svc.generate_response(request.messages, retrieved_items, previous_ids, gemini_client, groq_client)
+        print(f"[DEBUG] Generator response: {json.dumps(gen_response, indent=2)}")
 
         # 5. Reconstruct and Format Response (Step 4)
         selected_ids_raw = gen_response.get("selected_ids", [])
