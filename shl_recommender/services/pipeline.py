@@ -32,6 +32,10 @@ async def run_recommender_pipeline(
     )
     
     try:
+        # 0. Guard against empty or whitespace-only user messages
+        if not request.messages or not request.messages[-1].content.strip():
+            return fallback_response
+
         # 1. Turn-cap check (spec: max 8 total messages including user & assistant)
         total_turns = len(request.messages)
         turn_limit_reached = total_turns >= 7  # At 7 messages, we have room for exactly 1 reply to hit 8
@@ -70,7 +74,7 @@ async def run_recommender_pipeline(
             
             return ChatResponse(
                 reply=out_of_scope_reply,
-                recommendations=out_of_scope_recs,
+                recommendations=[],
                 end_of_conversation=False
             )
 
@@ -145,6 +149,9 @@ async def run_recommender_pipeline(
                 seen.add(sid)
                 selected_ids.append(sid)
 
+        # Hard cap at 10 recommendations (spec requirement)
+        selected_ids = selected_ids[:10]
+
         recommendations_ready = state.get("recommendations_ready", False)
         
         if not recommendations_ready or not selected_ids:
@@ -178,10 +185,13 @@ async def run_recommender_pipeline(
             hidden_state = "<!-- State: " + ", ".join([str(r.id) for r in recommendations_list]) + " -->"
             final_reply += f"\n\n{hidden_state}"
 
+        # Only allow end_of_conversation if we actually have a shortlist
+        eoc = state.get("end_of_conversation", False) and len(recommendations_list) > 0
+
         return ChatResponse(
             reply=final_reply,
             recommendations=recommendations_list,
-            end_of_conversation=state.get("end_of_conversation", False)
+            end_of_conversation=eoc
         )
 
     except Exception as e:

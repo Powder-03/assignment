@@ -2,8 +2,6 @@ __pycache__/
 *.pyc
 *.pyo
 .env
-*.faiss
-clean_catalog.json
 .idea/
 .vscode/
 *.egg-info/

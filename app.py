@@ -38,7 +38,8 @@ async def lifespan(app: FastAPI):
     for key in settings.GROQ_API_KEYS:
         app.state.groq_clients.append(AsyncOpenAI(
             base_url=settings.GROQ_BASE_URL,
-            api_key=key
+            api_key=key,
+            max_retries=0
         ))
     print(f"Initialized {len(app.state.groq_clients)} Groq AsyncOpenAI clients.")
 
@@ -46,7 +47,8 @@ async def lifespan(app: FastAPI):
     gemini_api_key = os.environ.get("GEMINI_API_KEY", settings.GEMINI_API_KEY)
     app.state.gemini_client = AsyncOpenAI(
         base_url=settings.GEMINI_BASE_URL,
-        api_key=gemini_api_key
+        api_key=gemini_api_key,
+        max_retries=0
     )
     print("Gemini AsyncOpenAI client initialized.")
 
@@ -54,7 +56,8 @@ async def lifespan(app: FastAPI):
     or_api_key = os.environ.get("OPENROUTER_API_KEY", settings.OPENROUTER_API_KEY)
     app.state.embed_client = AsyncOpenAI(
         base_url=settings.OPENROUTER_BASE_URL,
-        api_key=or_api_key
+        api_key=or_api_key,
+        max_retries=0
     )
     print("OpenRouter AsyncOpenAI client initialized.")
 

@@ -25,8 +25,13 @@ async def _chat_completion_with_fallback(
     if groq_clients:
         for client in groq_clients:
             clients_and_models.append((client, settings.GROQ_LLM_MODEL))
+
+    # Secondary: All Groq clients with fallback model (qwen3-32b)
+    if groq_clients:
+        for client in groq_clients:
+            clients_and_models.append((client, settings.GROQ_FALLBACK_MODEL))
             
-    # Secondary: Gemini
+    # Tertiary: Gemini
     gemini_key = gemini_client.api_key if gemini_client else None
     if gemini_key and gemini_key != "dummy":
         clients_and_models.append((gemini_client, settings.GEMINI_LLM_MODEL))
@@ -113,8 +118,11 @@ async def generate_clarifying_question(
     """
     clarify_system = (
         "You are a helpful SHL Assessment Recommender assistant. The user's request is too vague. "
-        "Ask a concise, polite clarifying question (strictly 1 sentence) to narrow down their hiring needs, "
-        "such as target role, level of seniority, language requirements, or assessment focus. "
+        "Ask a concise, polite clarifying question (strictly 1 sentence) to narrow down their hiring needs. "
+        "CRITICAL RULES: "
+        "- If the user mentions a contact centre or customer service role, you MUST specifically ask about their preferred call language or regional accent. "
+        "- If the user provides a Job Description (JD) or technical stack, you MUST specifically ask whether the role leans backend vs frontend, OR if they need a Senior IC vs Tech Lead. "
+        "- Otherwise, ask generally about target role, level of seniority, language requirements, or assessment focus. "
         "Do not output markdown tables or recommendations yet."
     )
     
