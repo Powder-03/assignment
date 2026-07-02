@@ -9,14 +9,9 @@ class ChatRequest(BaseModel):
     messages: List[Message]
 
 class RecommendationItem(BaseModel):
-    id: int
     name: str
-    test_type: str
-    keys: List[str]
-    duration: Optional[str] = None
-    languages: List[str]
     url: str
-    description: Optional[str] = None
+    test_type: str
 
 class ChatResponse(BaseModel):
     reply: str

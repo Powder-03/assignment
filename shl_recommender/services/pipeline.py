@@ -57,19 +57,14 @@ async def run_recommender_pipeline(
                 if sid in catalog:
                     item = catalog[sid]
                     out_of_scope_recs.append(RecommendationItem(
-                        id=item["id"],
                         name=item["name"],
-                        test_type=item["test_type"],
-                        keys=item.get("keys", []),
-                        duration=item.get("duration"),
-                        languages=item.get("languages", []),
                         url=item.get("url", ""),
-                        description=item.get("description")
+                        test_type=item["test_type"]
                     ))
             
             out_of_scope_reply = "I can help you select and recommend SHL assessments from the catalog, but I cannot assist with general HR advice, legal compliance questions, or off-topic prompts. Please let me know what kinds of skills or roles you are hiring for, and I will find the right assessments."
             if out_of_scope_recs:
-                hidden_state = "<!-- State: " + ", ".join([str(r.id) for r in out_of_scope_recs]) + " -->"
+                hidden_state = "<!-- State: " + ", ".join([str(sid) for sid in previous_ids]) + " -->"
                 out_of_scope_reply += f"\n\n{hidden_state}"
             
             return ChatResponse(
@@ -167,14 +162,9 @@ async def run_recommender_pipeline(
         for sid in selected_ids:
             item = catalog[sid]
             recommendations_list.append(RecommendationItem(
-                id=item["id"],
                 name=item["name"],
-                test_type=item["test_type"],
-                keys=item.get("keys", []),
-                duration=item.get("duration"),
-                languages=item.get("languages", []),
                 url=item.get("url", ""),
-                description=item.get("description")
+                test_type=item["test_type"]
             ))
 
         final_reply = gen_response.get("assistant_reply", "").strip()
@@ -182,7 +172,7 @@ async def run_recommender_pipeline(
         # Append hidden IDs to the reply string so the stateless state recovery
         # (parse_previous_recommendations) can find them in the next turn's history.
         if recommendations_list:
-            hidden_state = "<!-- State: " + ", ".join([str(r.id) for r in recommendations_list]) + " -->"
+            hidden_state = "<!-- State: " + ", ".join([str(sid) for sid in selected_ids]) + " -->"
             final_reply += f"\n\n{hidden_state}"
 
         # Only allow end_of_conversation if we actually have a shortlist
