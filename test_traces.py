@@ -6,7 +6,7 @@ import asyncio
 from typing import List, Dict, Any
 
 # Target local endpoint
-API_URL = "http://127.0.0.1:10000/chat"
+API_URL = "https://assignment-j95o.onrender.com/chat"
 
 def parse_trace_file(file_path: str) -> List[Dict[str, str]]:
     """

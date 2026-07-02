@@ -187,6 +187,10 @@ async def run_recommender_pipeline(
 
         # Only allow end_of_conversation if we actually have a shortlist
         eoc = state.get("end_of_conversation", False) and len(recommendations_list) > 0
+        
+        # Hard Eval: Honor turn cap. Force EOC if limit reached.
+        if turn_limit_reached:
+            eoc = True
 
         return ChatResponse(
             reply=final_reply,
